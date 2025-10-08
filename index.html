@@ -99,6 +99,12 @@
             color: #d1d5db; /* gray-300 */
             border-color: #4b5563; /* gray-600 */
         }
+        .seat.user-booked {
+            background-color: #3b82f6; /* blue-500 */
+            cursor: not-allowed;
+            color: white;
+            border-color: #2563eb; /* blue-600 */
+        }
         
         /* Airplane shape styles */
         .airplane {
@@ -162,6 +168,34 @@
             bottom: 25%;
             transform: translateX(-100%) rotate(-25deg);
             border-radius: 100% 20px 20px 20px;
+        }
+
+        /* Payment Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0,0,0,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.3s ease;
+        }
+        .modal-content {
+            background: white;
+            padding: 2.5rem;
+            border-radius: 1rem;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            transform: scale(0.95);
+            transition: transform 0.3s ease;
+        }
+        .modal-overlay:not(.hidden) .modal-content {
+            transform: scale(1);
         }
     </style>
 </head>
@@ -243,6 +277,63 @@
                      Book Now
                  </button>
             </div>
+        </div>
+    </div>
+    
+    <!-- Payment Modal -->
+    <div id="payment-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800">Confirm Your Payment</h2>
+                <button id="close-payment-modal" class="text-gray-500 hover:text-gray-800">&times;</button>
+            </div>
+            
+            <div class="bg-gray-100 p-4 rounded-lg mb-6">
+                <h3 class="font-semibold text-gray-700 mb-2">Order Summary</h3>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Selected Seats:</span>
+                    <span id="summary-seats" class="font-bold text-gray-800"></span>
+                </div>
+                <div class="flex justify-between mt-2 pt-2 border-t">
+                    <span class="text-gray-600 text-lg">Total Amount:</span>
+                    <span id="summary-total" class="font-bold text-blue-600 text-lg"></span>
+                </div>
+            </div>
+
+            <!-- Payment Method -->
+            <div id="card-details">
+                <h3 class="font-semibold text-gray-700 mb-4">Credit Card Details</h3>
+                <div class="space-y-4">
+                    <input type="text" placeholder="Cardholder Name" class="w-full p-3 rounded-lg border-gray-300 border" required>
+                    <input type="text" placeholder="Card Number (e.g., 1234 5678 9101 1121)" class="w-full p-3 rounded-lg border-gray-300 border" required>
+                    <div class="grid grid-cols-2 gap-4">
+                        <input type="text" placeholder="Expiry Date (MM/YY)" class="w-full p-3 rounded-lg border-gray-300 border" required>
+                        <input type="text" placeholder="CVV" class="w-full p-3 rounded-lg border-gray-300 border" required>
+                    </div>
+                </div>
+            </div>
+
+            <button id="confirm-payment-btn" class="mt-8 w-full bg-blue-600 text-white font-bold p-4 rounded-lg hover:bg-blue-700 transition-colors shadow-lg">
+                Confirm and Pay
+            </button>
+        </div>
+    </div>
+    
+    <!-- Receipt Modal -->
+    <div id="receipt-modal" class="modal-overlay hidden">
+        <div class="modal-content text-center">
+             <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <i class="fas fa-check text-green-500 text-4xl"></i>
+             </div>
+             <h2 class="text-2xl font-bold text-gray-800 mb-2">Booking Confirmed!</h2>
+             <p class="text-gray-600 mb-6">Your payment was successful and your seats are reserved.</p>
+             <div class="bg-gray-100 p-4 rounded-lg text-left space-y-2">
+                 <div class="flex justify-between"><span class="text-gray-600">Transaction ID:</span> <strong id="receipt-tid"></strong></div>
+                 <div class="flex justify-between"><span class="text-gray-600">Flight:</span> <strong id="receipt-flight"></strong></div>
+                 <div class="flex justify-between"><span class="text-gray-600">Seats:</span> <strong id="receipt-seats"></strong></div>
+                 <div class="flex justify-between border-t pt-2 mt-2"><span class="text-gray-600">Total Paid:</span> <strong id="receipt-total" class="text-blue-600"></strong></div>
+             </div>
+             <button id="close-receipt-modal" class="mt-8 w-full bg-gray-700 text-white font-bold p-3 rounded-lg hover:bg-gray-800 transition">Close</button>
         </div>
     </div>
 
@@ -413,11 +504,13 @@
             const seatMap = document.getElementById('seat-map');
             const bookingSummary = document.getElementById('booking-summary');
             const bookNowBtn = document.getElementById('book-now-btn');
+            const seatPrice = 20000;
             
             const rows = 15;
             const seatsPerRow = ['A', 'B', 'C', null, 'D', 'E', 'F'];
             let selectedSeats = [];
-
+            
+            // Generate seats
             for (let i = 1; i <= rows; i++) {
                 seatsPerRow.forEach(seatLetter => {
                     if (seatLetter === null) {
@@ -427,12 +520,11 @@
                         seatMap.appendChild(aisle);
                         return;
                     }
-
                     const seat = document.createElement('div');
                     const seatId = `${i}${seatLetter}`;
                     seat.dataset.seatId = seatId;
                     seat.classList.add('seat');
-                    seat.textContent = seatId; // Add seat identifier text
+                    seat.textContent = seatId;
 
                     if (Math.random() > 0.8) {
                         seat.classList.add('booked');
@@ -440,7 +532,6 @@
                         seat.classList.add('available');
                         seat.addEventListener('click', () => toggleSeatSelection(seat, seatId));
                     }
-                    
                     seatMap.appendChild(seat);
                 });
             }
@@ -461,10 +552,65 @@
                     bookingSummary.textContent = 'Select a seat to see details.';
                 } else {
                     selectedSeats.sort((a, b) => parseInt(a) - parseInt(b) || a.slice(-1).localeCompare(b.slice(-1)));
-                    bookingSummary.innerHTML = `You have selected seat(s): <span class="font-bold text-blue-600">${selectedSeats.join(', ')}</span>`;
+                    const totalPrice = (selectedSeats.length * seatPrice).toLocaleString('en-US');
+                    bookingSummary.innerHTML = `You have selected <span class="font-bold text-blue-600">${selectedSeats.length} seat(s)</span> for a total of <span class="font-bold text-blue-600">EGP ${totalPrice}</span>.`;
                 }
             }
+
+            // --- PAYMENT MODAL LOGIC ---
+            const paymentModal = document.getElementById('payment-modal');
+            const receiptModal = document.getElementById('receipt-modal');
+
+            bookNowBtn.addEventListener('click', () => {
+                const totalPrice = (selectedSeats.length * seatPrice).toLocaleString('en-US');
+                document.getElementById('summary-seats').textContent = selectedSeats.join(', ');
+                document.getElementById('summary-total').textContent = `EGP ${totalPrice}`;
+                paymentModal.classList.remove('hidden');
+            });
+
+            document.getElementById('close-payment-modal').addEventListener('click', () => {
+                paymentModal.classList.add('hidden');
+            });
+
+            document.getElementById('confirm-payment-btn').addEventListener('click', () => {
+                const btn = document.getElementById('confirm-payment-btn');
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Processing...';
+                
+                // Simulate backend processing
+                setTimeout(() => {
+                    paymentModal.classList.add('hidden');
+                    
+                    const totalPrice = (selectedSeats.length * seatPrice).toLocaleString('en-US');
+                    document.getElementById('receipt-tid').textContent = `TXN${Date.now()}`;
+                    document.getElementById('receipt-flight').textContent = document.getElementById('flight-info').textContent;
+                    document.getElementById('receipt-seats').textContent = selectedSeats.join(', ');
+                    document.getElementById('receipt-total').textContent = `EGP ${totalPrice}`;
+                    receiptModal.classList.remove('hidden');
+
+                    // Finalize booking
+                    selectedSeats.forEach(seatId => {
+                        const seatEl = document.querySelector(`.seat[data-seat-id="${seatId}"]`);
+                        if(seatEl){
+                            seatEl.classList.remove('selected', 'available');
+                            seatEl.classList.add('user-booked');
+                            seatEl.replaceWith(seatEl.cloneNode(true)); // Remove event listeners
+                        }
+                    });
+
+                    selectedSeats = [];
+                    updateBookingSummary();
+
+                    btn.disabled = false;
+                    btn.innerHTML = 'Confirm and Pay';
+
+                }, 2000);
+            });
             
+             document.getElementById('close-receipt-modal').addEventListener('click', () => {
+                receiptModal.classList.add('hidden');
+            });
+
             // Initial setup
             setupLiveTracker();
             requestAnimationFrame(liveAnimationLoop);
@@ -473,5 +619,6 @@
     </script>
 </body>
 </html>
+
 
 
